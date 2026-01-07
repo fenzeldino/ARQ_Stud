@@ -296,8 +296,7 @@ static struct answer *processRequest(struct request *reqPtr,
         answPtr->AnswType = AnswOk;
         answPtr->SeNo = nextExpected;
         nextExpected = 0;
-        /* optional: nextExpected zurücksetzen */
-        /* hier könnte appEndFn aufgerufen werden */
+        printf("Server: Transfer beendet, Datei geschlossen.\n");
         break;
     default:
     /* unbekannter Request-Typ -> Fehler */

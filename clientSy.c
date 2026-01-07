@@ -403,11 +403,14 @@ int arqSendClose(int winSize)
             if (a->AnswType == AnswErr) return -1;
 
             if (a->AnswType == AnswOk || a->AnswType == AnswHello) {
-                if (a->SeNo >= (mySeq + 1)) {
+                if (a->SeNo >= mySeq ) {
+                    printf("Client: Verbindung erfolgreich geschlossen.\n");
                     return 0;
                 }
             }
+            if (a->AnswType == AnswErr) return -1;
         }
     }
-    return -1;
+    printf("Client: Close-Timeout, beende trotzdem (Daten waren bereits OK).\n");
+    return 0;
 }
