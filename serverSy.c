@@ -255,11 +255,16 @@ static struct answer *processRequest(struct request *reqPtr,
     {
     case ReqHello:
     //Neustart / Initialisierung
-        nextExpected = 0;
+        
         if (g_appStart)
             (void)g_appStart();
+
+        /* Das Hello-Paket selbst ist die Nummer 0. 
+         * Nach erfolgreichem Hello erwarten wir als nächstes Paket 1. */
+        nextExpected = 1;
+
         answPtr->AnswType = AnswHello;
-        answPtr->SeNo = 0;
+        answPtr->SeNo = 1; /* Wir bestätigen 0 und erwarten 1 */
         break;
 
     case ReqData:

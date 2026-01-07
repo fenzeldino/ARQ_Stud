@@ -14,7 +14,7 @@
 #define DEFAULT_SOCKTYPE     SOCK_DGRAM    /* UDP  | SOCK_STREAM ... TCP */
 #define DEFAULT_PORT         "3333"        /* default UDP port as string */
 
-#define DEFAULT_LOOPBACK_HOST "127.0.0.1"//"::1"
+#define DEFAULT_LOOPBACK_HOST "::1"
 
 #define BUFFER_SIZE          65500
 
