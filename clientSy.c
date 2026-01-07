@@ -115,8 +115,8 @@ void initClient(char *name, const char *port)
     struct addrinfo *res = NULL;
 
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = DEFAULT_FAMILY;     /* i.d.R. PF_INET6 */
-    hints.ai_socktype = DEFAULT_SOCKTYPE;   /* UDP */
+    hints.ai_family   = PF_INET6;     /* i.d.R. PF_INET6 */
+    hints.ai_socktype = SOCK_DGRAM;   /* UDP */
     hints.ai_protocol = 0;
 
     const char *host = name;
