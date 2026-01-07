@@ -314,6 +314,7 @@ int arqSendHello(int winSize)
                 return -1;
             }
         }
+        usleep(100000);
         /* wenn keine Antwort: nächste Runde -> erneutes Hello (ggf. Retransmit-Mechanismus greift) */
     }
     return -1;
