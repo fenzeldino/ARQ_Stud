@@ -182,40 +182,45 @@ void closeClient(void)
  * doRequest: 1 Intervall (max 1 Send) + Empfang/ACK Auswertung
  * ============================================================ */
 
+#include <sys/time.h>
+#include <unistd.h>
+
 static struct answer *doRequest(struct request *req, int winSize, int *windowFull, int *retransmission)
 {
+    // Zeitmessung für den Zeitschlitz starten
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
     if (windowFull) *windowFull = 0;
     if (retransmission) *retransmission = 0;
 
     if (winSize < 1) winSize = 1;
     if (winSize > GBN_MAX_WINDOW) winSize = GBN_MAX_WINDOW;
 
-    /* Intervall-Tick */
+    /* Intervall-Tick erhöhen */
     gTick++;
 
-    /* 1) Timeout prüfen -> Retransmit starten */
+    /* 1) Timeout prüfen -> Retransmit-Flag setzen, falls das älteste Paket zu alt ist */
     if (gCount > 0) {
         int baseIdx = (int)(gBase % GBN_BUFFER_SIZE);
         unsigned long last = gLastSendTick[baseIdx];
         if (last > 0 && (gTick - last) >= (unsigned long)GBN_TIMEOUT_UNITS) {
             gRetransmitActive = 1;
-            gRetransmitPos = gBase;
+            gRetransmitPos = gBase; // Go-Back-N startet bei gBase
             if (retransmission) *retransmission = 1;
         }
     }
 
-    /* 2) Entscheiden: welches Paket senden (max. 1 pro Intervall) */
-    int sentSomething = 0;
-
+    /* 2) Sende-Entscheidung: MAXIMAL EIN Paket pro Zeitschlitz versenden */
     if (gRetransmitActive && gCount > 0) {
-        /* Go-Back-N: resend ab gRetransmitPos bis gNext-1 */
+        /* Wiederholte Übertragung hat laut Aufgabenstellung VORRANG */
         if (gRetransmitPos < gNext) {
             int idx = (int)(gRetransmitPos % GBN_BUFFER_SIZE);
             if (send_request(&gBuf[idx]) == 0) {
                 gLastSendTick[idx] = gTick;
-                sentSomething = 1;
             }
             gRetransmitPos++;
+            // Wenn alle unquittierten Pakete einmal neu gesendet wurden, Retransmit beenden
             if (gRetransmitPos >= gNext) {
                 gRetransmitActive = 0;
             }
@@ -224,33 +229,22 @@ static struct answer *doRequest(struct request *req, int winSize, int *windowFul
         }
     }
     else if (req != NULL) {
-        /* Neues Paket aufnehmen und senden, falls Fenster Platz hat */
+        /* Falls kein Retransmit ansteht: Neues Paket senden, wenn Fenster Platz hat */
         if (gCount >= winSize) {
             if (windowFull) *windowFull = 1;
         } else {
-            /* req->SeNr muss == gNext sein (Wrapper setzt das) */
             int idx = (int)(req->SeNr % GBN_BUFFER_SIZE);
+            gBuf[idx] = *req; // In Ringpuffer kopieren
 
-            /* in Ringpuffer kopieren */
-            gBuf[idx] = *req;
-
-            /* sofort senden */
             if (send_request(&gBuf[idx]) == 0) {
                 gLastSendTick[idx] = gTick;
-                sentSomething = 1;
-            } else {
-                /* Senden fehlgeschlagen: wir lassen es im Buffer, nächste Intervalle retry/timeout */
-                gLastSendTick[idx] = gTick;
             }
-
             gNext++;
             gCount++;
         }
     }
 
-    (void)sentSomething; /* nur für Debug interessant */
-
-    /* 3) Warten/Empfangen in diesem Intervall (select) */
+    /* 3) Warten/Empfangen mit select() */
     fd_set rfds;
     FD_ZERO(&rfds);
     FD_SET(gSock, &rfds);
@@ -259,23 +253,34 @@ static struct answer *doRequest(struct request *req, int winSize, int *windowFul
     tv.tv_sec  = 0;
     tv.tv_usec = (int)GBN_TIMEOUT_INT_MS * 1000;
 
+    struct answer *receivedAnsw = NULL;
     int rc = select(gSock + 1, &rfds, NULL, NULL, &tv);
+    
     if (rc > 0 && FD_ISSET(gSock, &rfds)) {
         struct answer *a = recv_answer_if_any();
-        if (!a) return NULL;
-
-        /* ACK auswerten */
-        if (a->AnswType == AnswOk) {
-            unsigned long ackNo = a->SeNo; /* kumulatives ACK: next expected */
-            if (ackNo >= gBase && ackNo <= gNext) {
-                slide_window(ackNo);
+        if (a) {
+            /* Kumulatives ACK auswerten */
+            if (a->AnswType == AnswOk || a->AnswType == AnswHello) {
+                unsigned long ackNo = a->SeNo; 
+                // Wenn das ACK im gültigen Bereich liegt, Fenster verschieben
+                if (ackNo >= gBase && ackNo <= gNext) {
+                    slide_window(ackNo);
+                }
             }
+            receivedAnsw = a;
         }
-        return a;
     }
 
-    /* kein relevantes Paket in diesem Intervall */
-    return NULL;
+    /* 4) Zeitschlitz-Synchronisation: Restzeit schlafen */
+    gettimeofday(&end, NULL);
+    long elapsed_usec = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_usec - start.tv_usec);
+    long interval_usec = (long)GBN_TIMEOUT_INT_MS * 1000L;
+
+    if (elapsed_usec < interval_usec) {
+        usleep(interval_usec - elapsed_usec);
+    }
+
+    return receivedAnsw;
 }
 
 /* ============================================================
