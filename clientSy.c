@@ -298,14 +298,23 @@ int arqSendHello(int winSize)
     req.ReqType = ReqHello;
     req.FlNr    = 0;
     req.SeNr    = 0;
+    /* 1. Versuch: Paket absenden */
+    int wf = 0, rt = 0;
+    struct answer *a = doRequest(&req, winSize, &wf, &rt);
+    if (a && (a->AnswType == AnswHello || a->AnswType == AnswOk)) return 0;
 
-    /* Hello: so lange senden bis AnswHello/AnswOk kommt oder zu viele Versuche */
+    /* Hello: so lange senden bis AnswHello/AnswOk kommt oder zu viele Versuche ()*/
+    /* Weitere Versuche: Nur noch warten (NULL übergeben) */
+    /* doRequest kümmert sich via gLastSendTick automatisch um Retransmits, 
+       wenn nach GBN_TIMEOUT_UNITS Ticks keine Antwort kam! */
     const int maxTries = 50; /* 50 * 100ms = 5s */
     for (int i = 0; i < maxTries; i++) {
+        a = a = doRequest(NULL, winSize, &wf, &rt); // NULL = kein neues Paket, nur warten/retransmit
+        /*
         int wf = 0, rt = 0;
         struct answer *a = doRequest(&req, winSize, &wf, &rt);
         (void)wf; (void)rt;
-
+        */
         if (a) {
             if (a->AnswType == AnswHello || a->AnswType == AnswOk) {
                 return 0;
